@@ -6,6 +6,7 @@ import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import validate from "../middleware/validate.js";
+import { requireAuth, requireAdmin } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -23,20 +24,21 @@ const loginSchema = z.object({
   password: z.string().min(1, "Password is required"),
 });
 
+function toPublicUser(user) {
+  return {
+    id: user._id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+  };
+}
+
 function sendAuth(res, status, user) {
   const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d",
   });
 
-  res.status(status).json({
-    token,
-    user: {
-      id: user._id,
-      name: user.name,
-      email: user.email,
-      role: user.role,
-    },
-  });
+  res.status(status).json({ token, user: toPublicUser(user) });
 }
 
 router.post(
@@ -73,5 +75,13 @@ router.post(
     sendAuth(res, 200, user);
   })
 );
+
+router.get("/me", requireAuth, (req, res) => {
+  res.json({ user: toPublicUser(req.user) });
+});
+
+router.get("/admin-check", requireAuth, requireAdmin, (req, res) => {
+  res.json({ ok: true });
+});
 
 export default router;
