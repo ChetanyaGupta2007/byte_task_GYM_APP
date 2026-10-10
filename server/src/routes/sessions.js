@@ -29,6 +29,10 @@ const createSchema = z.object({
     .default(20),
 });
 
+const listSchema = z.object({
+  date: z.string().date("date must be in YYYY-MM-DD format").optional(),
+});
+
 function toSessionView(session) {
   return {
     id: session._id,
@@ -38,6 +42,28 @@ function toSessionView(session) {
     seatsRemaining: session.capacity - session.bookedCount,
   };
 }
+
+router.get(
+  "/",
+  requireAuth,
+  validate(listSchema, "query"),
+  asyncHandler(async (req, res) => {
+    const { date } = req.query;
+    const filter = {};
+
+    if (date) {
+      const start = new Date(`${date}T00:00:00.000Z`);
+      const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+      filter.startsAt = { $gte: start, $lt: end };
+    } else {
+      filter.startsAt = { $gte: new Date() };
+    }
+
+    const sessions = await Session.find(filter).sort({ startsAt: 1 });
+
+    res.json({ sessions: sessions.map(toSessionView) });
+  })
+);
 
 router.post(
   "/",
