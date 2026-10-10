@@ -6,7 +6,7 @@ import User from "../models/User.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import validate from "../middleware/validate.js";
-import { requireAuth, requireAdmin } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
 
 const router = express.Router();
 
@@ -80,8 +80,5 @@ router.get("/me", requireAuth, (req, res) => {
   res.json({ user: toPublicUser(req.user) });
 });
 
-router.get("/admin-check", requireAuth, requireAdmin, (req, res) => {
-  res.json({ ok: true });
-});
 
 export default router;
