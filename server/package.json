@@ -2,12 +2,16 @@
   "name": "gym-booking-server",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20.6"
+  },
   "scripts": {
     "dev": "node --watch --env-file=.env src/index.js",
+    "seed": "node --env-file=.env src/scripts/seed.js",
     "start": "node --env-file=.env src/index.js"
   },
   "dependencies": {
-    "bcryptjs": "^2.4.3",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "jsonwebtoken": "^9.0.2",
