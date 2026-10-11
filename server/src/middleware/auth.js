@@ -33,3 +33,10 @@ export function requireAdmin(req, res, next) {
   }
   next();
 }
+
+export function requireMember(req, res, next) {
+  if (req.user.role !== "member") {
+    return next(new AppError(403, "Only members can do this"));
+  }
+  next();
+}

@@ -9,11 +9,13 @@ import Waitlist from "./models/Waitlist.js";
 import authRouter from "./routes/auth.js";
 import errorHandler from "./middleware/errorHandler.js";
 import sessionsRouter from "./routes/sessions.js";
+import bookingsRouter from "./routes/bookings.js";
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 app.use("/api/sessions", sessionsRouter);
+app.use("/api/bookings", bookingsRouter);
 
 app.get("/health", (req, res) => {
   res.json({ ok: mongoose.connection.readyState === 1 });
