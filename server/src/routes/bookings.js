@@ -5,6 +5,7 @@ import Session from "../models/Session.js";
 import Booking from "../models/Booking.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { promoteFromWaitlist } from "../utils/waitlist.js";
 import validate from "../middleware/validate.js";
 import { requireAuth, requireMember } from "../middleware/auth.js";
 
@@ -139,11 +140,15 @@ router.post(
       throw new AppError(409, "Booking is already cancelled");
     }
 
-    const updated = await Session.findByIdAndUpdate(
-      session._id,
-      { $inc: { bookedCount: -1 } },
-      { new: true }
-    );
+    const promoted = await promoteFromWaitlist(session);
+
+    const updated = promoted
+      ? await Session.findById(session._id)
+      : await Session.findByIdAndUpdate(
+          session._id,
+          { $inc: { bookedCount: -1 } },
+          { new: true }
+        );
 
     res.json({
       booking: { id: booking._id, status: "cancelled" },
