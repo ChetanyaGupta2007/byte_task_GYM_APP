@@ -1,5 +1,5 @@
 import Waitlist from "../models/Waitlist.js";
-import Booking from "../models/Booking.js";
+import { createBooking } from "./createBooking.js";
 
 export async function promoteFromWaitlist(session) {
   if (session.startsAt <= new Date()) {
@@ -17,10 +17,7 @@ export async function promoteFromWaitlist(session) {
     }
 
     try {
-      return await Booking.create({
-        user: entry.user,
-        session: session._id,
-      });
+      return await createBooking(entry.user, session._id);
     } catch (error) {
       if (error.code === 11000) {
         continue;

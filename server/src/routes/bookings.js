@@ -5,6 +5,7 @@ import Session from "../models/Session.js";
 import Booking from "../models/Booking.js";
 import AppError from "../utils/AppError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { createBooking } from "../utils/createBooking.js";
 import { promoteFromWaitlist } from "../utils/waitlist.js";
 import validate from "../middleware/validate.js";
 import { requireAuth, requireMember } from "../middleware/auth.js";
@@ -28,6 +29,8 @@ function toBookingView(booking) {
     id: booking._id,
     status: booking.status,
     createdAt: booking.createdAt,
+    checkInCode: booking.status === "confirmed" ? booking.checkInCode : null,
+    checkedInAt: booking.checkedInAt || null,
     session: {
       id: booking.session._id,
       startsAt: booking.session.startsAt,
@@ -86,10 +89,7 @@ router.post(
 
     let booking;
     try {
-      booking = await Booking.create({
-        user: req.user._id,
-        session: session._id,
-      });
+      booking = await createBooking(req.user._id, session._id);
     } catch (error) {
       await Session.updateOne(
         { _id: session._id },
@@ -103,6 +103,7 @@ router.post(
         id: booking._id,
         sessionId: booking.session,
         status: booking.status,
+        checkInCode: booking.checkInCode,
         createdAt: booking.createdAt,
       },
       seatsRemaining: claimed.capacity - claimed.bookedCount,
