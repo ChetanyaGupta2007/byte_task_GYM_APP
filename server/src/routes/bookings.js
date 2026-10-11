@@ -16,6 +16,36 @@ const createSchema = z.object({
     .refine((value) => mongoose.isValidObjectId(value), "Invalid sessionId"),
 });
 
+const idSchema = z.object({
+  id: z
+    .string()
+    .refine((value) => mongoose.isValidObjectId(value), "Invalid booking id"),
+});
+
+function toBookingView(booking) {
+  return {
+    id: booking._id,
+    status: booking.status,
+    createdAt: booking.createdAt,
+    session: {
+      id: booking.session._id,
+      startsAt: booking.session.startsAt,
+    },
+  };
+}
+
+router.get(
+  "/mine",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const bookings = await Booking.find({ user: req.user._id })
+      .populate("session")
+      .sort({ createdAt: -1 });
+
+    res.json({ bookings: bookings.map(toBookingView) });
+  })
+);
+
 router.post(
   "/",
   requireAuth,
@@ -75,6 +105,49 @@ router.post(
         createdAt: booking.createdAt,
       },
       seatsRemaining: claimed.capacity - claimed.bookedCount,
+    });
+  })
+);
+
+router.post(
+  "/:id/cancel",
+  requireAuth,
+  validate(idSchema, "params"),
+  asyncHandler(async (req, res) => {
+    const booking = await Booking.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+    if (!booking) {
+      throw new AppError(404, "Booking not found");
+    }
+
+    if (booking.status === "cancelled") {
+      throw new AppError(409, "Booking is already cancelled");
+    }
+
+    const session = await Session.findById(booking.session);
+    if (session.startsAt <= new Date()) {
+      throw new AppError(409, "Session has already started");
+    }
+
+    const cancelled = await Booking.findOneAndUpdate(
+      { _id: booking._id, status: "confirmed" },
+      { status: "cancelled" }
+    );
+    if (!cancelled) {
+      throw new AppError(409, "Booking is already cancelled");
+    }
+
+    const updated = await Session.findByIdAndUpdate(
+      session._id,
+      { $inc: { bookedCount: -1 } },
+      { new: true }
+    );
+
+    res.json({
+      booking: { id: booking._id, status: "cancelled" },
+      seatsRemaining: updated.capacity - updated.bookedCount,
     });
   })
 );
