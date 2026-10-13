@@ -1,28 +1,8 @@
 import { useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../AuthContext.jsx";
+import Field from "../components/Field.jsx";
 
-function Field({ id, label, type = "text", value, onChange, error, autoComplete }) {
-  return (
-    <div className="field">
-      <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        type={type}
-        value={value}
-        onChange={onChange}
-        autoComplete={autoComplete}
-        aria-invalid={error ? "true" : "false"}
-        aria-describedby={error ? `${id}-error` : undefined}
-      />
-      {error && (
-        <p id={`${id}-error`} className="error">
-          Error: {error}
-        </p>
-      )}
-    </div>
-  );
-}
 
 export default function AuthPage() {
   const { user, loading, authenticate } = useAuth();

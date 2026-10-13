@@ -1,8 +1,33 @@
-
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { useAuth } from "../AuthContext.jsx";
 import { formatTime } from "../format.js";
+import { usePolling } from "../usePolling.js";
+
+async function fetchSessionData(date, isMember) {
+  const query = date ? `?date=${date}` : "";
+  const sessionsData = await api(`/sessions${query}`);
+
+  const booked = {};
+  const waiting = {};
+
+  if (isMember) {
+    const bookingsData = await api("/bookings/mine");
+    const waitlistData = await api("/waitlist/mine");
+
+    bookingsData.bookings
+      .filter((booking) => booking.status === "confirmed")
+      .forEach((booking) => {
+        booked[booking.session.id] = true;
+      });
+
+    waitlistData.waitlist.forEach((entry) => {
+      waiting[entry.session.id] = entry.position;
+    });
+  }
+
+  return { sessions: sessionsData.sessions, booked, waiting };
+}
 
 export default function SessionsPage() {
   const { user } = useAuth();
@@ -16,92 +41,55 @@ export default function SessionsPage() {
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  const version = useRef(0);
 
-  const load = useCallback(async (silent = false) => {
-    try {
-      const query = date ? `?date=${date}` : "";
+  useEffect(() => {
+    let ignore = false;
 
-      const [sessionsData, bookingsData, waitlistData] =
-        await Promise.all([
-          api(`/sessions${query}`),
-          isMember ? api("/bookings/mine") : { bookings: [] },
-          isMember ? api("/waitlist/mine") : { waitlist: [] },
-        ]);
+    async function fetchFirst() {
+      try {
+        const data = await fetchSessionData(date, isMember);
+        if (ignore) return;
 
-      const bookedMap = {};
-      bookingsData.bookings
-        .filter((booking) => booking.status === "confirmed")
-        .forEach((booking) => {
-          bookedMap[booking.session.id] = true;
-        });
+        setSessions(data.sessions);
+        setBooked(data.booked);
+        setWaiting(data.waiting);
+        setLoadError("");
+        setStatus("ready");
+      } catch (error) {
+        if (ignore) return;
 
-      const waitingMap = {};
-      waitlistData.waitlist.forEach((entry) => {
-        waitingMap[entry.session.id] = entry.position;
-      });
-
-      setSessions(sessionsData.sessions);
-      setBooked(bookedMap);
-      setWaiting(waitingMap);
-      setStatus("ready");
-      setLoadError("");
-    } catch (error) {
-      if (silent) {
-        setActionError(error.message);
-      } else {
         setLoadError(error.message);
         setStatus("error");
       }
     }
+
+    fetchFirst();
+
+    return () => {
+      ignore = true;
+    };
+  }, [date, isMember, reloadKey]);
+
+  const load = useCallback(async () => {
+    const startedAt = version.current;
+
+    try {
+      const data = await fetchSessionData(date, isMember);
+      if (version.current !== startedAt) return;
+
+      setSessions(data.sessions);
+      setBooked(data.booked);
+      setWaiting(data.waiting);
+    } catch (error) {
+      if (version.current === startedAt) {
+        setActionError(error.message);
+      }
+    }
   }, [date, isMember]);
 
-  useEffect(() => {
-  let ignore = false;
-
-  async function fetchSessions() {
-    try {
-      const query = date ? `?date=${date}` : "";
-
-      const [sessionsData, bookingsData, waitlistData] =
-        await Promise.all([
-          api(`/sessions${query}`),
-          isMember ? api("/bookings/mine") : { bookings: [] },
-          isMember ? api("/waitlist/mine") : { waitlist: [] },
-        ]);
-
-      if (ignore) return;
-
-      const bookedMap = {};
-      bookingsData.bookings
-        .filter((booking) => booking.status === "confirmed")
-        .forEach((booking) => {
-          bookedMap[booking.session.id] = true;
-        });
-
-      const waitingMap = {};
-      waitlistData.waitlist.forEach((entry) => {
-        waitingMap[entry.session.id] = entry.position;
-      });
-
-      setSessions(sessionsData.sessions);
-      setBooked(bookedMap);
-      setWaiting(waitingMap);
-      setLoadError("");
-      setStatus("ready");
-    } catch (error) {
-      if (ignore) return;
-
-      setLoadError(error.message);
-      setStatus("error");
-    }
-  }
-
-  fetchSessions();
-
-  return () => {
-    ignore = true;
-  };
-}, [date, isMember]);
+  usePolling(load, 5000, busy || status !== "ready");
 
   function handleDateChange(value) {
     setDate(value);
@@ -110,35 +98,60 @@ export default function SessionsPage() {
     setActionError("");
   }
 
+  function retry() {
+    setStatus("loading");
+    setLoadError("");
+    setReloadKey((key) => key + 1);
+  }
+
   async function run(request) {
+    version.current += 1;
     setBusy(true);
     setActionError("");
 
     try {
       await request();
-      await load(true);
     } catch (error) {
       setActionError(error.message);
-    } finally {
-      setBusy(false);
     }
+
+    await load();
+    setBusy(false);
   }
 
-  const book = (id) =>
-    run(() =>
-      api("/bookings", {
-        method: "POST",
-        body: { sessionId: id },
-      })
+  async function book(id) {
+    version.current += 1;
+    const before = { sessions, booked };
+
+    setBusy(true);
+    setActionError("");
+    setSessions(
+      sessions.map((session) =>
+        session.id === id
+          ? {
+              ...session,
+              bookedCount: session.bookedCount + 1,
+              seatsRemaining: session.seatsRemaining - 1,
+            }
+          : session
+      )
     );
+    setBooked({ ...booked, [id]: true });
+
+    try {
+      await api("/bookings", { method: "POST", body: { sessionId: id } });
+    } catch (error) {
+      setSessions(before.sessions);
+      setBooked(before.booked);
+      setActionError(error.message);
+    }
+
+    await load();
+    setBusy(false);
+  }
 
   const joinWaitlist = (id) =>
-    run(() =>
-      api("/waitlist", {
-        method: "POST",
-        body: { sessionId: id },
-      })
-    );
+    run(() => api("/waitlist", { method: "POST", body: { sessionId: id } }));
 
   const leaveWaitlist = (id) =>
     run(() => api(`/waitlist/${id}`, { method: "DELETE" }));
@@ -147,59 +160,38 @@ export default function SessionsPage() {
     <section>
       <h1>Sessions</h1>
 
-      <div className="filter">
-        <label htmlFor="date">Filter by date</label>
+      <div>
+        <label htmlFor="date">Filter by date</label>{" "}
         <input
           id="date"
           type="date"
           value={date}
           onChange={(event) => handleDateChange(event.target.value)}
-        />
-
+        />{" "}
         {date && (
-          <button
-            type="button"
-            onClick={() => handleDateChange("")}
-          >
+          <button type="button" onClick={() => handleDateChange("")}>
             Show upcoming
           </button>
         )}
       </div>
 
-      {actionError && (
-        <p role="alert" className="error">
-          Error: {actionError}
-        </p>
-      )}
+      {actionError && <p role="alert">Error: {actionError}</p>}
 
-      {status === "loading" && (
-        <p role="status">Loading sessions...</p>
-      )}
+      {status === "loading" && <p role="status">Loading sessions...</p>}
 
       {status === "error" && (
         <div>
-          <p role="alert" className="error">
-            Error: {loadError}
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              setStatus("loading");
-              setLoadError("");
-              load(false);
-            }}
-          >
+          <p role="alert">Error: {loadError}</p>
+          <button type="button" onClick={retry}>
             Try again
           </button>
         </div>
       )}
 
-      {status === "ready" && sessions.length === 0 && (
-        <p>No sessions found.</p>
-      )}
+      {status === "ready" && sessions.length === 0 && <p>No sessions found.</p>}
 
       {status === "ready" && sessions.length > 0 && (
-        <ul className="cards">
+        <ul>
           {sessions.map((session) => {
             const started = new Date(session.startsAt) <= new Date();
             const full = session.seatsRemaining === 0;
@@ -207,7 +199,7 @@ export default function SessionsPage() {
             const position = waiting[session.id];
 
             return (
-              <li key={session.id} className="card">
+              <li key={session.id}>
                 <h2>{formatTime(session.startsAt)}</h2>
 
                 <p>
@@ -218,9 +210,7 @@ export default function SessionsPage() {
 
                 {started && <p>This session has started.</p>}
 
-                {!started && isMember && isBooked && (
-                  <p>You are booked.</p>
-                )}
+                {!started && isMember && isBooked && <p>You are booked.</p>}
 
                 {!started && isMember && !isBooked && position && (
                   <>
@@ -238,7 +228,6 @@ export default function SessionsPage() {
                 {!started && isMember && !isBooked && !position && !full && (
                   <button
                     type="button"
-                    className="primary"
                     disabled={busy}
                     onClick={() => book(session.id)}
                   >
