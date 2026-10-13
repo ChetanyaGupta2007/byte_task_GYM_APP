@@ -3,15 +3,16 @@
 A web app where members book hourly gym sessions, join a waitlist when a session is full, and check in with a code. Admins create sessions and check members in.
 
 frontend https://byte-task-gym-app.vercel.app/
+backend https://byte-task-gym-app.onrender.com/
 
 ## Test accounts
 
 | Role  Email  Password |
 
-| Admin  <SEED_ADMIN_EMAIL>  <SEED_ADMIN_PASSWORD> |
-| Member  member1@test.com  password123 |
-| Member  member2@test.com  password123 |
-| Member  member3@test.com  password123 |
+| Admin  admin@example.com YourStrongPassword123!|
+| Member 1  member1@test.com  password123 |
+| Member 2 member2@test.com  password123 |
+| Member 3 member3@test.com  password123 |
 
 The database contains sessions over the next few days, including one that is full (with a waitlist) and one with a single seat left. member1 holds bookings with check-in codes (see "My bookings").
 
