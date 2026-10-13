@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "node --watch --env-file=.env src/index.js",
     "seed": "node --env-file=.env src/scripts/seed.js",
-    "start": "node --env-file=.env src/index.js",
+    "start": "node src/index.js",
     "test:concurrency": "node --env-file=.env src/scripts/concurrency-test.js"
   },
   "dependencies": {
